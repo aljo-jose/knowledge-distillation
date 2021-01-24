@@ -8,11 +8,15 @@ class FCModel(nn.Module):
         super(FCModel,self).__init__()
         self.lin1 = nn.Linear(28*28, 1200)
         self.lin2 = nn.Linear(1200,1200)
+        self.dropout1 = nn.Dropout(0.3)
+        self.dropout2 = nn.Dropout(0.3)
         self.lin3 = nn.Linear(1200,10)
         
     def forward(self, inputs):
         x = F.relu(self.lin1(inputs.view(-1,28*28)))
+        x = self.dropout1(x)
         x = F.relu(self.lin2(x))
+        x = self.dropout2(x)
         x = self.lin3(x)
         out = F.log_softmax(x, dim=1)
         return out
@@ -45,8 +49,8 @@ class CNNModel(nn.Module):
 class StudentModel(nn.Module):
     def __init__(self):
         super(StudentModel,self).__init__()
-        self.lin1 = nn.Linear(28*28, 400)
-        self.lin2 = nn.Linear(400,10)
+        self.lin1 = nn.Linear(28*28, 800)
+        self.lin2 = nn.Linear(800,10)
         
     def forward(self, inputs):
         x = F.relu(self.lin1(inputs.view(-1,28*28)))

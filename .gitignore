@@ -1,0 +1,8 @@
+*.gz
+*.pyc
+.vscode/.ropeproject/config.py
+.vscode/settings.json
+*.pt
+input/*
+*.DS_Store
+.vscode/.ropeproject/objectdb

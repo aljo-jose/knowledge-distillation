@@ -1,15 +1,21 @@
-#from __future__ import print_function
+# Ref : https://github.com/pytorch/examples/tree/master/mnist
 import argparse
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
+from torch.utils.tensorboard import SummaryWriter
 import models
+import config
+
+steps = 0
 
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
+    global steps
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
@@ -17,6 +23,8 @@ def train(args, model, device, train_loader, optimizer, epoch):
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
+        steps += 1
+        args.writer.add_scalar('Loss/train', loss.item(), steps)
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
@@ -25,7 +33,7 @@ def train(args, model, device, train_loader, optimizer, epoch):
                 break
 
 
-def test(model, device, test_loader):
+def test(args, model, device, test_loader):
     model.eval()
     test_loss = 0
     correct = 0
@@ -38,10 +46,15 @@ def test(model, device, test_loader):
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
+    test_errors =  len(test_loader.dataset) - correct
+    args.writer.add_scalar('Loss/test', test_loss, steps)
+    args.writer.add_scalar('Accuracy/error_count', test_errors, steps)
+    args.writer.add_scalar('Accuracy/correct%', 100. * correct / len(test_loader.dataset), steps)
 
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
+    return test_loss
 
 
 def main():
@@ -49,6 +62,8 @@ def main():
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--model', type=str, metavar='N',
                         help='fc/cnn/student', required=True)
+    parser.add_argument('--experiment', type=str, metavar='N',
+                        help='experiment name', required=True)
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
@@ -96,25 +111,33 @@ def main():
     train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 
-    assert args.model in ('fc', 'cnn', 'student'), "only fc/cnn/student models are supported."
-    if args.model == 'fc':
+    assert args.model in ('teacher-fc', 'teacher-cnn', 'student-fc'), "only fc/cnn/student models are supported."
+    if args.model == 'teacher-fc':
         model = models.FCModel()
-    elif args.model == 'cnn':
+    elif args.model == 'teacher-cnn':
         model = models.CNNModel()
-    elif args.model == 'student':
+    elif args.model == 'student-fc':
         model = models.StudentModel()
+
+    writer = SummaryWriter(log_dir=f'logs/{args.model}-{args.experiment}')
+    args.writer = writer
 
     model = model.to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
+    best_loss = np.inf
+    model_path = config.MODEL_PATH.format(model_name=args.model)
     for epoch in range(1, args.epochs + 1):
         train(args, model, device, train_loader, optimizer, epoch)
-        test(model, device, test_loader)
+        test_loss = test(args, model, device, test_loader)
         scheduler.step()
-        if args.save_model:
-            torch.save(model.state_dict(), "mnist_"+args.model+".pt")
+        if args.save_model and test_loss<best_loss:
+            test_loss = best_loss
+            torch.save(model.state_dict(), model_path)
+            print(f'saved model to {model_path}')
 
+    args.writer.close()
 
 if __name__ == '__main__':
     main()

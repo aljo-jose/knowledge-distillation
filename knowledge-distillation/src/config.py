@@ -1,0 +1,1 @@
+MODEL_PATH = 'checkpoint/&model_name.pt'
